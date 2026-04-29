@@ -137,6 +137,76 @@
     
     #start-btn.hidden { display: none; }
     
+    #loading-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 9;
+      width: 80%;
+      max-width: 400px;
+      display: none;
+    }
+    
+    #loading-container.active {
+      display: block;
+    }
+    
+    .loading-text {
+      text-align: center;
+      margin-bottom: 15px;
+      font-size: 1rem;
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    
+    .progress-bar-container {
+      width: 100%;
+      height: 8px;
+      background: rgba(30, 41, 59, 0.8);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+    }
+    
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent) 0%, #06b6d4 50%, var(--accent) 100%);
+      background-size: 200% 100%;
+      border-radius: 10px;
+      animation: progressAnimation 2s ease-in-out infinite, shimmer 1.5s linear infinite;
+      box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+      transition: width 0.3s ease;
+    }
+    
+    @keyframes progressAnimation {
+      0%, 100% {
+        box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+      }
+      50% {
+        box-shadow: 0 0 30px rgba(0, 255, 136, 0.8);
+      }
+    }
+    
+    @keyframes shimmer {
+      0% {
+        background-position: 200% 0;
+      }
+      100% {
+        background-position: -200% 0;
+      }
+    }
+    
+    .loading-percentage {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 0.9rem;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    
     #stats {
       margin-top: 30px;
       padding: 20px 30px;
@@ -215,6 +285,13 @@
       <video id="video" autoplay muted playsinline></video>
       <canvas id="canvas"></canvas>
       <button id="start-btn">Iniciar Cámara</button>
+      <div id="loading-container">
+        <div class="loading-text">Cargando modelo de IA...</div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="loading-percentage" id="loading-percentage">0%</div>
+      </div>
     </div>
   </div>
 
@@ -240,8 +317,24 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const startBtn = document.getElementById("start-btn");
+const loadingContainer = document.getElementById("loading-container");
+const progressBar = document.getElementById("progress-bar");
+const loadingPercentage = document.getElementById("loading-percentage");
 
 function setStatus(msg) { statusEl.textContent = msg; }
+
+function showLoading() {
+  loadingContainer.classList.add("active");
+}
+
+function hideLoading() {
+  loadingContainer.classList.remove("active");
+}
+
+function updateProgress(percent) {
+  progressBar.style.width = percent + "%";
+  loadingPercentage.textContent = Math.round(percent) + "%";
+}
 
 // Camera access helper with fallbacks
 function getCamera(constraints) {
@@ -296,7 +389,7 @@ startBtn.addEventListener("click", async () => {
       video.onerror = rej;
     });
     await video.play();
-    setStatus("Cámara OK. Cargando modelo...");
+    setStatus("Cámara OK. Cargando modelo de IA...");
   } catch (e) {
     setStatus("Error cámara: " + (e.message || e));
     return;
@@ -304,8 +397,27 @@ startBtn.addEventListener("click", async () => {
 
   // 2. Model
   try {
+    // Show loading bar
+    showLoading();
+    
+    // Simulate progress (TensorFlow doesn't provide real progress)
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+      progress += Math.random() * 15;
+      if (progress > 90) progress = 90;
+      updateProgress(progress);
+    }, 200);
+
     const model = await cocoSsd.load({ base: "lite_mobilenet_v2" });
-    setStatus("Detectando...");
+    
+    // Complete progress
+    clearInterval(progressInterval);
+    updateProgress(100);
+    
+    setTimeout(() => {
+      hideLoading();
+      setStatus("✓ Modelo cargado. Detectando objetos...");
+    }, 500);
 
     // 3. Loop
     async function detect() {
@@ -346,6 +458,7 @@ startBtn.addEventListener("click", async () => {
     detect();
 
   } catch (e) {
+    hideLoading();
     setStatus("Error modelo: " + (e.message || e));
   }
 });
