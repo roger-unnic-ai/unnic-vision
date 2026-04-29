@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Unnic AI - Detección de Objetos en Tiempo Real</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --bg-light: #1e293b;
+      --accent: #00ff88;
+      --accent-hover: #00e079;
+      --text-primary: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-light) 100%);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    header {
+      width: 100%;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+    }
+    
+    .logo {
+      width: 50px;
+      height: 50px;
+      filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.3));
+    }
+    
+    h1 { 
+      font-size: 1.8rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    
+    h1 .brand { 
+      background: linear-gradient(135deg, var(--accent) 0%, #06b6d4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    h1 .subtitle {
+      font-weight: 400;
+      color: var(--text-muted);
+    }
+    
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+      width: 100%;
+      max-width: 1200px;
+    }
+    
+    #status {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      padding: 12px 24px;
+      text-align: center;
+      max-width: 90%;
+      background: rgba(30, 41, 59, 0.5);
+      border-radius: 8px;
+      margin-bottom: 30px;
+      border: 1px solid var(--border);
+    }
+    
+    #viewport {
+      position: relative;
+      width: 100%;
+      max-width: 800px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border);
+    }
+    
+    #sizer { 
+      width: 100%; 
+      padding-bottom: 75%; 
+      position: relative;
+      background: var(--bg-light);
+    }
+    
+    video, canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    
+    canvas { z-index: 2; }
+    
+    #start-btn {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      background: linear-gradient(135deg, var(--accent) 0%, #06b6d4 100%);
+      color: var(--bg-dark);
+      border: none;
+      padding: 18px 40px;
+      border-radius: 12px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+      transition: all 0.3s ease;
+    }
+    
+    #start-btn:hover {
+      transform: translate(-50%, -50%) scale(1.05);
+      box-shadow: 0 15px 40px rgba(0, 255, 136, 0.4);
+    }
+    
+    #start-btn.hidden { display: none; }
+    
+    #stats {
+      margin-top: 30px;
+      padding: 20px 30px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      background: rgba(30, 41, 59, 0.5);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      display: flex;
+      gap: 30px;
+      align-items: center;
+    }
+    
+    #stats span { 
+      color: var(--accent); 
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+    
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .stat-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+    
+    footer {
+      width: 100%;
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.5);
+    }
+    
+    @media (max-width: 640px) {
+      header {
+        padding: 15px;
+      }
+      
+      .logo {
+        width: 40px;
+        height: 40px;
+      }
+      
+      h1 {
+        font-size: 1.3rem;
+      }
+      
+      #stats {
+        flex-direction: column;
+        gap: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <img src="icon.svg" alt="Unnic AI Logo" class="logo">
+  <h1><span class="brand">Unnic AI</span> <span class="subtitle">Vision</span></h1>
+</header>
+
+<main>
+  <div id="status">Pulsa el botón para iniciar la detección de objetos en tiempo real</div>
+
+  <div id="viewport">
+    <div id="sizer">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas"></canvas>
+      <button id="start-btn">Iniciar Cámara</button>
+    </div>
+  </div>
+
+  <div id="stats">
+    <div class="stat-item">
+      <span class="stat-label">Objetos Detectados</span>
+      <span id="count">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">Tiempo de Procesamiento</span>
+      <span id="time">—</span>
+    </div>
+  </div>
+</main>
+
+<footer>
+  © 2026 Unnic AI. Sistema de Detección de Objetos en Tiempo Real
+</footer>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const startBtn = document.getElementById("start-btn");
+
+function setStatus(msg) { statusEl.textContent = msg; }
+
+// Camera access helper with fallbacks
+function getCamera(constraints) {
+  // Modern API
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    return navigator.mediaDevices.getUserMedia(constraints);
+  }
+  // Legacy fallback
+  const legacyGetUserMedia = navigator.getUserMedia
+    || navigator.webkitGetUserMedia
+    || navigator.mozGetUserMedia;
+  if (legacyGetUserMedia) {
+    return new Promise((resolve, reject) => {
+      legacyGetUserMedia.call(navigator, constraints, resolve, reject);
+    });
+  }
+  return Promise.reject(new Error("Tu navegador no soporta acceso a cámara. Abre esta página en Safari o Chrome con HTTPS."));
+}
+
+startBtn.addEventListener("click", async () => {
+  startBtn.classList.add("hidden");
+
+  // Check HTTPS on mobile
+  const isSecure = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  if (!isSecure && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    setStatus("⚠️ La cámara requiere HTTPS en móvil. Sube este archivo a un servidor HTTPS o usa localhost.");
+    return;
+  }
+
+  // 1. Camera
+  setStatus("Pidiendo acceso a cámara...");
+  try {
+    // Try rear camera first, fall back to any camera
+    let stream;
+    try {
+      stream = await getCamera({
+        video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false
+      });
+    } catch (e) {
+      // Fallback: any camera
+      stream = await getCamera({ video: true, audio: false });
+    }
+
+    video.srcObject = stream;
+    await new Promise((res, rej) => {
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        res();
+      };
+      video.onerror = rej;
+    });
+    await video.play();
+    setStatus("Cámara OK. Cargando modelo...");
+  } catch (e) {
+    setStatus("Error cámara: " + (e.message || e));
+    return;
+  }
+
+  // 2. Model
+  try {
+    const model = await cocoSsd.load({ base: "lite_mobilenet_v2" });
+    setStatus("Detectando...");
+
+    // 3. Loop
+    async function detect() {
+      try {
+        const t0 = performance.now();
+        const predictions = await model.detect(video);
+        const ms = (performance.now() - t0).toFixed(0);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        predictions.forEach(p => {
+          const [x, y, w, h] = p.bbox;
+          const hue = (p.class.charCodeAt(0) * 37) % 360;
+          const color = `hsl(${hue}, 85%, 60%)`;
+          const label = `${p.class} ${(p.score * 100).toFixed(0)}%`;
+
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x, y, w, h);
+
+          ctx.font = "bold 13px sans-serif";
+          const tw = ctx.measureText(label).width;
+          ctx.fillStyle = color;
+          ctx.globalAlpha = 0.8;
+          ctx.fillRect(x, y > 20 ? y - 20 : y, tw + 8, 20);
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = "#000";
+          ctx.fillText(label, x + 4, y > 20 ? y - 6 : y + 14);
+        });
+
+        document.getElementById("count").textContent = predictions.length;
+        document.getElementById("time").textContent = ms + "ms";
+      } catch (e) {
+        console.error(e);
+      }
+      requestAnimationFrame(detect);
+    }
+    detect();
+
+  } catch (e) {
+    setStatus("Error modelo: " + (e.message || e));
+  }
+});
+</script>
+
+</body>
+</html>
